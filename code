@@ -1,0 +1,159 @@
+#include <stdint.h>
+#include "ESP8266"
+
+// Pin and Port Definitions
+#define MOTOR_FORWARD_PIN  GPIO_Pin_0  // Example pin for forward movement
+#define MOTOR_BACKWARD_PIN GPIO_Pin_1  // Example pin for backward movement
+#define MOTOR_PORT         GPIOA       // Example GPIO port
+
+#define SEED_DISPENSER_PIN GPIO_Pin_2  // Pin for seed dispensing
+#define SEED_DISPENSER_PORT GPIOA      // GPIO port for seed dispenser
+
+#define DIGGING_PIN        GPIO_Pin_3  // Pin for digging mechanism
+#define DIGGING_PORT       GPIOA       // GPIO port for digging
+
+// Motor Control Enumeration
+typedef enum {
+    MOTOR_STOP,
+    MOTOR_FORWARD,
+    MOTOR_BACKWARD
+} MotorState;
+
+// Seed Planter Configuration Structure
+typedef struct {
+    uint16_t row_length;         // Length of the row to plant
+    uint16_t seed_spacing;        // Distance between seeds
+    uint16_t current_position;    // Current position in the row
+} SeedPlanterConfig;
+
+// Global Configuration
+SeedPlanterConfig planter_config = {
+    .row_length = 1000,           // 1000 cm row length
+    .seed_spacing = 20,            // 20 cm between seeds
+    .current_position = 0
+};
+
+// Initialize GPIO Pins
+void GPIO_Initialize(void) {
+    // Enable GPIO clock
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
+    
+    GPIO_InitTypeDef GPIO_InitStructure;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+    
+    // Configure motor control pins
+    GPIO_InitStructure.GPIO_Pin = MOTOR_FORWARD_PIN | MOTOR_BACKWARD_PIN;
+    GPIO_Init(MOTOR_PORT, &GPIO_InitStructure);
+    
+    // Configure seed dispenser pin
+    GPIO_InitStructure.GPIO_Pin = SEED_DISPENSER_PIN;
+    GPIO_Init(SEED_DISPENSER_PORT, &GPIO_InitStructure);
+    
+    // Configure digging mechanism pin
+    GPIO_InitStructure.GPIO_Pin = DIGGING_PIN;
+    GPIO_Init(DIGGING_PORT, &GPIO_InitStructure);
+}
+
+// Control Motor Movement
+void ControlMotor(MotorState state) {
+    switch(state) {
+        case MOTOR_FORWARD:
+            GPIO_SetBits(MOTOR_PORT, MOTOR_FORWARD_PIN);
+            GPIO_ResetBits(MOTOR_PORT, MOTOR_BACKWARD_PIN);
+            break;
+        
+        case MOTOR_BACKWARD:
+            GPIO_SetBits(MOTOR_PORT, MOTOR_BACKWARD_PIN);
+            GPIO_ResetBits(MOTOR_PORT, MOTOR_FORWARD_PIN);
+            break;
+        
+        case MOTOR_STOP:
+        default:
+            GPIO_ResetBits(MOTOR_PORT, MOTOR_FORWARD_PIN | MOTOR_BACKWARD_PIN);
+            break;
+    }
+}
+
+// Dispense Seeds
+void DispenseSeeds(void) {
+    // Activate seed dispenser
+    GPIO_SetBits(SEED_DISPENSER_PORT, SEED_DISPENSER_PIN);
+    
+    // Delay to control seed release duration
+    Delay_ms(500);  // Adjust based on seed dispensing mechanism
+    
+    // Deactivate seed dispenser
+    GPIO_ResetBits(SEED_DISPENSER_PORT, SEED_DISPENSER_PIN);
+}
+
+// Dig Hole for Seed
+void DigHole(void) {
+    // Activate digging mechanism
+    GPIO_SetBits(DIGGING_PORT, DIGGING_PIN);
+    
+    // Delay for digging depth
+    Delay_ms(1000);  // Adjust based on digging mechanism
+    
+    // Deactivate digging mechanism
+    GPIO_ResetBits(DIGGING_PORT, DIGGING_PIN);
+}
+
+// Main Seed Planting Sequence
+void PlantSeed(void) {
+    // Stop motor initially
+    ControlMotor(MOTOR_STOP);
+    
+    // Move forward to planting position
+    ControlMotor(MOTOR_FORWARD);
+    Delay_ms(500);  // Adjust based on distance per movement
+    ControlMotor(MOTOR_STOP);
+    
+    // Dig hole
+    DigHole();
+    
+    // Dispense seed
+    DispenseSeeds();
+    
+    // Move backward to reset position
+    ControlMotor(MOTOR_BACKWARD);
+    Delay_ms(500);  // Same distance as forward movement
+    ControlMotor(MOTOR_STOP);
+}
+
+// Main Function
+int main(void) {
+    // Initialize system
+    SystemInit();
+    GPIO_Initialize();
+    
+    // Continuous planting sequence
+    while(1) {
+        // Check if we've reached the end of the row
+        if(planter_config.current_position < planter_config.row_length) {
+            PlantSeed();
+            
+            // Update current position
+            planter_config.current_position += planter_config.seed_spacing;
+        } else {
+            // Row planting complete
+            break;
+        }
+    }
+    
+    return 0;
+}
+
+// Delay Function (Implement based on your microcontroller)
+void Delay_ms(uint32_t milliseconds) {
+    // Implement a blocking or non-blocking delay 
+    // This is a simple blocking delay - replace with timer-based delay if needed
+    volatile uint32_t i, j;
+    for(i = 0; i < milliseconds; i++) {
+        for(j = 0; j < 1000; j++) {
+            __NOP();  // No operation - creates a delay
+        }
+    }
+}
